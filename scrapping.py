@@ -7,37 +7,66 @@ import selenium.webdriver as webdriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 import os as system
+from selenium.webdriver.remote.remote_connection import LOGGER
+import logging
 
+LOGGER.setLevel(logging.WARNING)
 def scrape(link):
-    driver = webdriver.Firefox()
+    driver = webdriver.Edge()
     driver.get(link)
-    scrollDown(driver)
-    time.sleep(1)
-    soup = BeautifulSoup(driver.page_source)
-    article = soup.find('article')
-    article_text = str(article)
-    mainPagePostsElem = article_text.split("<a")
-    print(f'Nº posts found:{len(mainPagePostsElem)}')
+    logIn(driver)
+
+    postsLinks = set()
+    ##Scroll down
+    old_position = 0
+    new_position = None
+    while new_position != old_position:
+        # Get old scroll position
+        old_position = driver.execute_script(
+                ("return (window.pageYOffset !== undefined) ?"
+                 " window.pageYOffset : (document.documentElement ||"
+                 " document.body.parentNode || document.body);"))
+        time.sleep(2)
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        article = soup.find('article')
+        article_text = str(article)
+        htmlAelems = article_text.split("<a")
+        for elem in htmlAelems:
+            if(elem.__contains__("href")):
+                postLink = elem.split("href=\"")[1]
+                postLink = postLink.split("\"")[0]
+                postLink = f"https://www.instagram.com{postLink}"
+                postsLinks.add(postLink)
+        new_position = scroll(driver, old_position)
+    
+    print(f"Found {len(postsLinks)} posts")
+    print(postsLinks)
     driver.close()
     results = []
-    for post in mainPagePostsElem:
-        if(post.__contains__("href")):       
-            postLink = post.split("href=\"")[1]
-            postLink = postLink.split("\"")[0]
-            postLink = f"https://www.instagram.com{postLink}"
-            print(postLink)
-            ##Get the post alt information 
-            try:
-                altInformation = post.split("img alt=\"")[1]
-                altInformation = altInformation.split("\" class=\"")[0]
-            except:
-                altInformation = ''
-            result = getPostInfo(postLink, altInformation)
-            results.append(result)
+    for post in postsLinks:
+        print(f'Getting post information... "{post}"')
+        #Get the post alt information 
+        try:
+            altInformation = post.split("img alt=\"")[1]
+            altInformation = altInformation.split("\" class=\"")[0]
+        except:
+            altInformation = ''
+        result = getPostInfo(post, altInformation)
+        results.append(result)
     return results
 
-def scrollDown(driver):    
+def scroll(driver, old_position):
+    next_position = old_position + 200
+    driver.execute_script(f"window.scrollTo(0, {next_position});")
+    # Get new position
+    return driver.execute_script(("return (window.pageYOffset !== undefined) ?"
+                " window.pageYOffset : (document.documentElement ||"
+                " document.body.parentNode || document.body);"))
+
+def logIn(driver):    
     cookies = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[2]/div/div/div[3]/div/div/div[1]/div/div[2]/div/div/div/div/div[2]/div/button[1]")))
     cookies.click()
     time.sleep(2)
@@ -48,64 +77,20 @@ def scrollDown(driver):
     username = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='username']")))
     password = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='password']")))
 
-    username.send_keys("a")
-    password.send_keys('a')
+    print("Logging in...")
+    username.send_keys("Username")
+    password.send_keys("Password")
 
     submit = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")))
 
-    submit.click()    
+    submit.click()
 
-    # not_now = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[2]/div/div/div[3]/div/div/div[1]/div/div[2]/div/div/div/div/div[2]/div/div/div[3]/div[3]/div/div[3]/div/div')))
-
-    # not_now.click()
+    not_now = None
     try:
         not_now = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'div[class="_ac8f"]')))
         not_now.click()
     except:
-        not_now
-
-    ##Scroll down
-    old_position = 0
-    new_position = None
-
-    while new_position != old_position:
-        # Get old scroll position
-        old_position = driver.execute_script(
-                ("return (window.pageYOffset !== undefined) ?"
-                 " window.pageYOffset : (document.documentElement ||"
-                 " document.body.parentNode || document.body);"))
-        # Sleep and Scroll
-        time.sleep(2)
-        driver.execute_script((
-                "var scrollingElement = (document.scrollingElement ||"
-                " document.body);scrollingElement.scrollTop ="
-                " scrollingElement.scrollHeight;"))
-        # Get new position
-        new_position = driver.execute_script(
-                ("return (window.pageYOffset !== undefined) ?"
-                 " window.pageYOffset : (document.documentElement ||"
-                 " document.body.parentNode || document.body);"))
-    
-    one_third_postion = new_position*(1/3)
-    two_third_position = new_position*(2/3)
-    curr_position = one_third_postion
-    max_posts = 0
-    max_post_position = 0
-    while(curr_position < two_third_position):
-        driver.execute_script(f"window.scrollTo(0, {curr_position});")
-        soup = BeautifulSoup(driver.page_source)
-        article = soup.find('article')
-        article_text = str(article)
-        mainPagePostsElem = article_text.split("<a")
-        if(len(mainPagePostsElem)>max_posts):
-            max_posts = len(mainPagePostsElem)
-            max_post_position = curr_position
-        curr_position += 1000
-    driver.execute_script(f"window.scrollTo(0, {max_post_position});")   
-    print(new_position, curr_position, max_posts)
-    print("stoped scrolling")
-
-
+        not_now = None
 
 def getPostInfo(postLink, altInformation = ''):
     page = requests.get(postLink)
@@ -179,7 +164,7 @@ def getPostDate(link, videoFlag = 0):
         views = views.split("<span>")[1]
         views = int(views.split("</span>")[0].strip())
 
-    timev = soup.find('time')
+    timev = soup.find(class_='_aaqe')
     timev = str(timev)
     timev = timev.split("datetime=\"")[1]
     timev = timev.split("\"")[0]
@@ -205,12 +190,15 @@ def createFolder(folderName):
 
 
 def main():
-    fileName = "instagram"
-    folder = createFolder("Results")      
+    print("Welcome to the Instagram Scraper")
+    print("Please enter the following information")
+    fileName = input("File name: ")
+    link = input("Instagram link: ")
+    folder = createFolder("Results")    
+    print("The csv file will be saved in the Results folder")  
     fileName = f"{folder}/{fileName}.csv"
-    results = scrape("https://www.instagram.com/quantropi/")
+    results = scrape(link)
     initializeCSV(fileName, results)
-
 
 if __name__ == '__main__':
     main()

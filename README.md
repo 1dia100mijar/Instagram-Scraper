@@ -6,8 +6,9 @@ Scrapper to get the information related to all post of a Instagram account
 - requests
 - bs4 
 - selenium
-- re
-- csv
+
+You can install all at once with the following command:
+> pip install requests bs4 selenium
 
 
 ### Insert your Instagram's account **username** and **password** on the lines:

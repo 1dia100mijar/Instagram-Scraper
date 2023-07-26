@@ -10,16 +10,12 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 import os as system
-from selenium.webdriver.remote.remote_connection import LOGGER
-import logging
 
-LOGGER.setLevel(logging.WARNING)
-def scrape(link):
-    driver = webdriver.Edge()
+def scrape(driver, link):
     driver.get(link)
     logIn(driver)
 
-    postsLinks = set()
+    posts = {}
     ##Scroll down
     old_position = 0
     new_position = None
@@ -29,37 +25,38 @@ def scrape(link):
                 ("return (window.pageYOffset !== undefined) ?"
                  " window.pageYOffset : (document.documentElement ||"
                  " document.body.parentNode || document.body);"))
-        time.sleep(2)
+        time.sleep(1)
         soup = BeautifulSoup(driver.page_source, "html.parser")
         article = soup.find('article')
         article_text = str(article)
         htmlAelems = article_text.split("<a")
+        aux = 1
         for elem in htmlAelems:
             if(elem.__contains__("href")):
+                #Get post link
                 postLink = elem.split("href=\"")[1]
                 postLink = postLink.split("\"")[0]
                 postLink = f"https://www.instagram.com{postLink}"
-                postsLinks.add(postLink)
+                #Get post alt information
+                try:
+                    alt = elem.split('img alt=\"')[1]
+                    alt = alt.split("\"")[0]
+                except:
+                    alt = ''
+                posts[postLink] = alt
+        # Move down
         new_position = scroll(driver, old_position)
     
-    print(f"Found {len(postsLinks)} posts")
-    print(postsLinks)
-    driver.close()
+    print(f"Found {len(posts)} posts")
     results = []
-    for post in postsLinks:
-        print(f'Getting post information... "{post}"')
-        #Get the post alt information 
-        try:
-            altInformation = post.split("img alt=\"")[1]
-            altInformation = altInformation.split("\" class=\"")[0]
-        except:
-            altInformation = ''
-        result = getPostInfo(post, altInformation)
+    for link, altInformation in posts.items():
+        print(f'Getting post information... "{link}"')
+        result = getPostInfo(driver, link, altInformation)
         results.append(result)
     return results
 
 def scroll(driver, old_position):
-    next_position = old_position + 200
+    next_position = old_position + 700
     driver.execute_script(f"window.scrollTo(0, {next_position});")
     # Get new position
     return driver.execute_script(("return (window.pageYOffset !== undefined) ?"
@@ -78,8 +75,8 @@ def logIn(driver):
     password = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='password']")))
 
     print("Logging in...")
-    username.send_keys("Username")
-    password.send_keys("Password")
+    username.send_keys("*username*")
+    password.send_keys("*password*")
 
     submit = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")))
 
@@ -92,7 +89,7 @@ def logIn(driver):
     except:
         not_now = None
 
-def getPostInfo(postLink, altInformation = ''):
+def getPostInfo(driver, postLink, altInformation = ''):
     page = requests.get(postLink)
     soup = BeautifulSoup(page.content, 'html.parser')
     soup = str(soup)
@@ -106,18 +103,18 @@ def getPostInfo(postLink, altInformation = ''):
     comments = getPostComments(soup) 
     description = getDescription(soup)
     hashtags = getHashtags(description)
-    time = getPostDate(postLink, isVideoFlag)
+    time = getPostDate(driver, postLink, isVideoFlag)
     return [postLink, time[0], time[1], Content_type, time[2], likes, comments, description, hashtags, altInformation]
      
 def getPostLikes(information):
-    likes = information.split("likes,")[0]
-    separator = "'"
-    likes = likes.split(separator)[-1]
+    likes = information.split(" likes,")[0]
+    likes = likes.split("'")[-1]
+
     if(re.search('[a-zA-Z]', likes)):
-        separator = "\""
-        likes = likes.split(separator)[-1]
+        likes = likes.split("\"")[-1].strip()
     try:
-        likes = int(likes.strip())
+        if(likes[-1] != "K" and likes[-1] != "M"):
+            likes = int(likes.strip())
     except:
         likes = 'Error'
     return likes
@@ -125,7 +122,9 @@ def getPostLikes(information):
 def getPostComments(information):
     comments = information.split("comments")[0]
     try:
-        comments = int(comments.split(",")[-1].strip())
+        comments = comments.split(",")[-1].strip()
+        if(comments[-1] != "K" and comments[-1] != "M"):
+            comments = int(comments)
     except:
         comments = 'Error'
     return comments
@@ -134,6 +133,7 @@ def getPostComments(information):
 def getDescription(information):
     description = information.split("<title>")[1]
     description = description.split("\"")[1]
+    description = description.split("\"</title>")[0]
     if description == "HasteSupportData":
         description = ""
     return description
@@ -150,10 +150,9 @@ def getHashtags(description):
 
     return hashtags
 
-def getPostDate(link, videoFlag = 0):
-    driver = webdriver.Firefox()
+def getPostDate(driver, link, videoFlag = 0):
     driver.get(link)
-    time.sleep(3)
+    time.sleep(1)
     soup = BeautifulSoup(driver.page_source, 'html.parser')
 
     # Get the video views
@@ -171,7 +170,6 @@ def getPostDate(link, videoFlag = 0):
     timev = timev.replace("T", " ")
     timev = timev.replace("Z", "")
     timev = timev.split(" ")
-    driver.close()
     return [timev[0], timev[1], views]
 
 def initializeCSV(fileName, results):
@@ -193,12 +191,20 @@ def main():
     print("Welcome to the Instagram Scraper")
     print("Please enter the following information")
     fileName = input("File name: ")
+    fileName = f'{fileName}.csv'
     link = input("Instagram link: ")
     folder = createFolder("Results")    
-    print("The csv file will be saved in the Results folder")  
-    fileName = f"{folder}/{fileName}.csv"
-    results = scrape(link)
-    initializeCSV(fileName, results)
+    fileDir = f"{folder}/{fileName}"
+
+    print("Creating driver...")
+    driver = webdriver.Edge()
+    
+    results = scrape(driver, link)
+    driver.close()
+    initializeCSV(fileDir, results)
+    
+    print("\n\nDone!")
+    print(f'The csv file {fileName} was saved in the Results directory')
 
 if __name__ == '__main__':
     main()

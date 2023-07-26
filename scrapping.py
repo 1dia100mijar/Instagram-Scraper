@@ -14,7 +14,7 @@ import os as system
 def scrape(driver, link):
     driver.get(link)
     logIn(driver)
-
+    time.sleep(4)
     posts = {}
     ##Scroll down
     old_position = 0
@@ -29,9 +29,8 @@ def scrape(driver, link):
         soup = BeautifulSoup(driver.page_source, "html.parser")
         article = soup.find('article')
         article_text = str(article)
-        htmlAelems = article_text.split("<a")
-        aux = 1
-        for elem in htmlAelems:
+        htmlElems = article_text.split("<a")
+        for elem in htmlElems:
             if(elem.__contains__("href")):
                 #Get post link
                 postLink = elem.split("href=\"")[1]
@@ -75,6 +74,7 @@ def logIn(driver):
     password = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='password']")))
 
     print("Logging in...")
+    
     username.send_keys("*username*")
     password.send_keys("*password*")
 
@@ -196,14 +196,17 @@ def main():
     folder = createFolder("Results")    
     fileDir = f"{folder}/{fileName}"
 
+    start = time.time()
+
     print("Creating driver...")
     driver = webdriver.Edge()
     
     results = scrape(driver, link)
     driver.close()
     initializeCSV(fileDir, results)
-    
-    print("\n\nDone!")
+    end = time.time()
+    elapsedTime = (end - start)/60
+    print(f'\n\nDone! Time elapsed: {elapsedTime} minutes')
     print(f'The csv file {fileName} was saved in the Results directory')
 
 if __name__ == '__main__':

@@ -77,6 +77,7 @@ def logIn(driver):
     
     username.send_keys("*username*")
     password.send_keys("*password*")
+    
 
     submit = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")))
 
@@ -107,33 +108,34 @@ def getPostInfo(driver, postLink, altInformation = ''):
     return [postLink, time[0], time[1], Content_type, time[2], likes, comments, description, hashtags, altInformation]
      
 def getPostLikes(information):
-    likes = information.split(" likes,")[0]
-    likes = likes.split("'")[-1]
-
-    if(re.search('[a-zA-Z]', likes)):
-        likes = likes.split("\"")[-1].strip()
+    
     try:
-        if(likes[-1] != "K" and likes[-1] != "M"):
-            likes = int(likes.strip())
+        likes = information.split(" likes,")[0]
+        likes = likes.split("'")[-1].strip()
+
+        if(re.search('[a-zA-Z]', likes)):
+            likes = likes.split("\"")[-1].strip()
     except:
         likes = 'Error'
     return likes
 
 def getPostComments(information):
-    comments = information.split("comments")[0]
     try:
+        comments = information.split("comments")[0]
         comments = comments.split(",")[-1].strip()
-        if(comments[-1] != "K" and comments[-1] != "M"):
-            comments = int(comments)
+        comments = comments
     except:
         comments = 'Error'
     return comments
     
 
 def getDescription(information):
-    description = information.split("<title>")[1]
-    description = description.split("\"")[1]
-    description = description.split("\"</title>")[0]
+    try:
+        description = information.split("<title>")[1]
+        description = description.split("\"")[1]
+        description = description.split("\"</title>")[0]
+    except:
+        description = 'Error'
     if description == "HasteSupportData":
         description = ""
     return description
@@ -160,13 +162,20 @@ def getPostDate(driver, link, videoFlag = 0):
     if(videoFlag == 1):
         views = soup.find('span', class_='_aauw')
         views = str(views)
-        views = views.split("<span>")[1]
-        views = int(views.split("</span>")[0].strip())
+        try:
+            views = views.split("<span>")[1]
+            views = views.split("</span>")[0].strip()
+        except:
+            views = 'Error!'
 
+    # Get the post date
     timev = soup.find(class_='_aaqe')
     timev = str(timev)
-    timev = timev.split("datetime=\"")[1]
-    timev = timev.split("\"")[0]
+    try:
+        timev = timev.split("datetime=\"")[1]
+        timev = timev.split("\"")[0]
+    except:
+        timev = 'Error! Error!'
     timev = timev.replace("T", " ")
     timev = timev.replace("Z", "")
     timev = timev.split(" ")
@@ -200,13 +209,13 @@ def main():
 
     print("Creating driver...")
     driver = webdriver.Edge()
-    
+
     results = scrape(driver, link)
     driver.close()
     initializeCSV(fileDir, results)
     end = time.time()
     elapsedTime = (end - start)/60
-    print(f'\n\nDone! Time elapsed: {elapsedTime} minutes')
+    print(f'\n\nDone! Time elapsed: {elapsedTime:.2f} minutes')
     print(f'The csv file {fileName} was saved in the Results directory')
 
 if __name__ == '__main__':
